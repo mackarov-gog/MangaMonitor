@@ -27,3 +27,5 @@ secrets.h
 firmware/**/secrets.h
 **/build
 
+**/mangamonitor.log
+
