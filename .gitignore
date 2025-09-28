@@ -1,0 +1,29 @@
+IoT-H.txt
+BLA.md
+
+# Общие исключения
+.DS_Store
+*.swp
+*.log
+
+# Среда разработки
+.vscode/
+.idea/
+
+# Зависимости
+node_modules/
+venv/
+__pycache__/
+
+# Прошивки
+*.bin
+*.elf
+*.hex
+
+# Конфиги с секретами
+.env
+*.pem
+secrets.h
+firmware/**/secrets.h
+**/build
+
