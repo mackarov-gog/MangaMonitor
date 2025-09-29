@@ -27,7 +27,7 @@ async def run():
 
     # используем контекстный менеджер, чтобы сессия гарантированно закрывалась
     async with parser:
-        results = await parser.search(q, max_pages=2)
+        results = await parser.search(q, max_pages=2000)
         if not results:
             print("Ничего не найдено.")
             return
