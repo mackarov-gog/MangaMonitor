@@ -8,7 +8,6 @@ from parsers.base_parser import BaseParser, Manga
 from parsers.mangalib import MangaLibParser
 from parsers.readmanga import ReadMangaParser
 from parsers.remanga import RemangaParser
-from parsers.seimanga import SeiMangaParser
 from parsers.desu import DesuParser
 import logging
 
@@ -27,17 +26,23 @@ class ParserManager:
         logger.info(f"Зарегистрирован парсер: {parser.name}")
 
     def register_all_parsers(self):
-        """Регистрирует все доступные парсеры"""
-        parsers = [
-            MangaLibParser(),
-            ReadMangaParser(),
-            RemangaParser(),
-            SeiMangaParser(),
-            DesuParser()
-        ]
+        enabled = self.config.get("enabled_parsers", [])
 
-        for parser in parsers:
-            self.register_parser(parser)
+        if "mangalib" in enabled:
+            from parsers import mangalib
+            self.register_parser("mangalib", mangalib.MockParser())
+
+        if "remanga" in enabled:
+            from parsers import remanga
+            self.register_parser("remanga", remanga.MockParser())
+
+        if "readmanga" in enabled:
+            from parsers import readmanga
+            self.register_parser("readmanga", readmanga.MockParser())
+
+        if "seimanga" in enabled:
+            from parsers.real.seimanga_real import SeiMangaParser
+            self.register_parser("seimanga", SeiMangaParser())
 
     async def search_all(self, query: str) -> List[Manga]:
         """Выполняет поиск по всем зарегистрированным парсерам"""
