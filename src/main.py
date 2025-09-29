@@ -8,9 +8,7 @@ import os
 import asyncio
 import logging
 from pathlib import Path
-from parsers.real.seimanga_real import SeiMangaParser
 
-parser = SeiMangaParser()
 
 
 # Добавляем src в путь для импортов

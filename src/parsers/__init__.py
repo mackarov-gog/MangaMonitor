@@ -9,8 +9,9 @@ from .remanga import RemangaParser
 from .seimanga import SeiMangaParser
 from .desu import DesuParser
 
+
+
 __all__ = [
     'BaseParser', 'Manga', 'Chapter', 'Page', 'MangaStatus',
-    'MangaLibParser', 'ReadMangaParser', 'RemangaParser',
-    'SeiMangaParser', 'DesuParser'
+    'MangaLibParser', 'ReadMangaParser', 'RemangaParser',  'DesuParser'
 ]

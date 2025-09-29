@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List, Dict
-from parsers.real.seimanga_real import SeiMangaParser
+
 
 def register_all_parsers(self):
     # тестовые
