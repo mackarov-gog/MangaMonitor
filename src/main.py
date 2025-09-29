@@ -11,8 +11,11 @@ from pathlib import Path
 
 
 
+
 # Добавляем src в путь для импортов
 sys.path.append(str(Path(__file__).parent))
+
+
 
 try:
     from core.config import AppConfig
@@ -26,6 +29,7 @@ except ImportError as e:
     print("Убедитесь, что все модули созданы и зависимости установлены")
     sys.exit(1)
 
+self.parser_manager = ParserManager(self.config.data)
 
 class MangaMonitor:
     """Основной класс приложения"""

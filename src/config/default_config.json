@@ -2,5 +2,5 @@
   "host": "127.0.0.1",
   "port": 8080,
   "debug": true,
-  "enabled_parsers": ["seimanga", "mangalib"]
+  "enabled_parsers": ["seimanga"]
 }

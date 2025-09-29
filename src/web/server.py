@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from core.parser_manager import ParserManager
 from core.config import AppConfig
+
 import os
 
 app = FastAPI(title="MangaMonitor API", version="1.0.0")
@@ -15,6 +16,8 @@ app = FastAPI(title="MangaMonitor API", version="1.0.0")
 # Инициализация компонентов
 parser_manager = ParserManager()
 config = AppConfig()
+
+
 
 # CORS middleware
 app.add_middleware(

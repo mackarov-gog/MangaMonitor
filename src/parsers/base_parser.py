@@ -1,60 +1,61 @@
 from abc import ABC, abstractmethod
 from typing import List, Dict
+from enum import Enum
 
 
-def register_all_parsers(self):
-    # тестовые
-    from parsers import mangalib, remanga, readmanga
+class MangaStatus(Enum):
+    ONGOING = "ongoing"
+    COMPLETED = "completed"
+    UNKNOWN = "unknown"
 
-    self.register_parser("mangalib", mangalib.MockParser())
-    self.register_parser("remanga", remanga.MockParser())
-    self.register_parser("readmanga", readmanga.MockParser())
 
-    # реальные
-    self.register_parser("seimanga", SeiMangaParser())
+class Manga:
+    def __init__(self, title: str, url: str, author: str = None,
+                 genres: List[str] = None, description: str = ""):
+        self.title = title
+        self.url = url
+        self.author = author
+        self.genres = genres or []
+        self.description = description
+        self.chapters: List[Chapter] = []  # объявится ниже
+
+
+class Chapter:
+    def __init__(self, title: str, url: str, date: str = None):
+        self.title = title
+        self.url = url
+        self.date = date
+        self.pages: List[Page] = []
+
+
+class Page:
+    def __init__(self, url: str, local_path: str = None):
+        self.url = url
+        self.local_path = local_path
 
 
 class BaseParser(ABC):
-    """
-    Абстрактный класс для всех парсеров манги.
-    Все реальные и тестовые парсеры должны реализовать эти методы.
-    """
+    @abstractmethod
+    async def search(self, query: str) -> List[Dict]:
+        """Поиск манги по названию"""
+        raise NotImplementedError
 
     @abstractmethod
     async def get_manga_info(self, url: str) -> Dict:
-        """
-        Возвращает информацию о манге:
-        {
-            "title": str,
-            "author": str,
-            "genres": [str],
-            "description": str,
-            "chapters": [ { "title": str, "url": str, "date": str } ]
-        }
-        """
+        """Инфо о манге + список глав"""
         raise NotImplementedError
 
     @abstractmethod
     async def get_chapters(self, manga_url: str) -> List[Dict]:
-        """
-        Возвращает список глав по URL манги:
-        [
-            { "title": str, "url": str, "date": str }
-        ]
-        """
+        """Список глав"""
         raise NotImplementedError
 
     @abstractmethod
     async def get_chapter_pages(self, chapter_url: str) -> List[str]:
-        """
-        Возвращает список страниц главы (ссылки на изображения).
-        """
+        """Список страниц главы"""
         raise NotImplementedError
 
     @abstractmethod
     async def download_chapter(self, chapter_url: str, out_dir: str) -> List[str]:
-        """
-        Скачивает страницы главы в указанную папку.
-        Возвращает список локальных файлов.
-        """
+        """Скачать главу"""
         raise NotImplementedError

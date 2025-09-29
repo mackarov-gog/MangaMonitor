@@ -1,92 +1,60 @@
-"""
-Менеджер парсеров для координации работы всех парсеров
-"""
-
-from typing import List, Dict
-import asyncio
-from parsers.base_parser import BaseParser, Manga
-from parsers.mangalib import MangaLibParser
-from parsers.readmanga import ReadMangaParser
-from parsers.remanga import RemangaParser
-from parsers.desu import DesuParser
 import logging
-
-logger = logging.getLogger(__name__)
+from typing import Dict, Any
 
 
 class ParserManager:
-    """Управляет всеми зарегистрированными парсерами"""
+    def __init__(self, config=None):
+        self.config = config or {}
+        self.parsers = {}
+        self.logger = logging.getLogger("ParserManager")
 
-    def __init__(self):
-        self.parsers: Dict[str, BaseParser] = {}
 
-    def register_parser(self, parser: BaseParser):
-        """Регистрирует парсер в менеджере"""
-        self.parsers[parser.name] = parser
-        logger.info(f"Зарегистрирован парсер: {parser.name}")
+    def register_parser(self, name: str, parser):
+        """Регистрирует парсер по имени"""
+        self.parsers[name] = parser
+        self.logger.debug(f"Зарегистрирован парсер: {name}")
 
     def register_all_parsers(self):
+        """Регистрирует парсеры в соответствии с конфигом"""
         enabled = self.config.get("enabled_parsers", [])
-
-        if "mangalib" in enabled:
-            from parsers import mangalib
-            self.register_parser("mangalib", mangalib.MockParser())
-
-        if "remanga" in enabled:
-            from parsers import remanga
-            self.register_parser("remanga", remanga.MockParser())
-
-        if "readmanga" in enabled:
-            from parsers import readmanga
-            self.register_parser("readmanga", readmanga.MockParser())
+        self.logger.info(f"Активные парсеры из конфига: {enabled}")
 
         if "seimanga" in enabled:
-            from parsers.real.seimanga_real import SeiMangaParser
-            self.register_parser("seimanga", SeiMangaParser())
+            try:
+                from parsers.real.seimanga_real import SeiMangaParser
+                self.register_parser("seimanga", SeiMangaParser())
+            except Exception as e:
+                self.logger.error(f"Ошибка регистрации парсера seimanga: {e}")
 
-    async def search_all(self, query: str) -> List[Manga]:
-        """Выполняет поиск по всем зарегистрированным парсерам"""
-        if not self.parsers:
-            return []
+        # можно по аналогии подключать и другие реальные/тестовые
+        if "mangalib" in enabled:
+            try:
+                from parsers.mangalib import MangaLibParser
+                self.register_parser("mangalib", MangaLibParser())
+            except Exception as e:
+                self.logger.error(f"Ошибка регистрации парсера mangalib: {e}")
 
-        tasks = []
-        for parser_name, parser in self.parsers.items():
-            task = self._safe_search(parser, query, parser_name)
-            tasks.append(task)
+        if "remanga" in enabled:
+            try:
+                from parsers.remanga import RemangaParser
+                self.register_parser("remanga", RemangaParser())
+            except Exception as e:
+                self.logger.error(f"Ошибка регистрации парсера remanga: {e}")
 
-        # Запускаем все поиски параллельно
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        # Объединяем результаты
-        all_manga = []
-        for result in results:
-            if isinstance(result, list):
-                all_manga.extend(result)
-
-        logger.info(f"Поиск завершен. Всего найдено: {len(all_manga)} манги")
-        return all_manga
-
-    async def _safe_search(self, parser: BaseParser, query: str, parser_name: str):
-        """Безопасный поиск с обработкой ошибок"""
-        try:
-            logger.info(f"Поиск в парсере {parser_name}: '{query}'")
-            results = await parser.search(query)
-            logger.info(f"Парсер {parser_name} нашел {len(results)} результатов")
-            return results
-        except Exception as e:
-            logger.error(f"Ошибка в парсере {parser_name}: {e}")
-            return []
-
-    def get_parser(self, source_name: str) -> BaseParser:
-        """Возвращает парсер по имени источника"""
-        return self.parsers.get(source_name)
-
-    def get_available_sources(self) -> List[str]:
-        """Возвращает список доступных источников"""
-        return list(self.parsers.keys())
+        if "readmanga" in enabled:
+            try:
+                from parsers.readmanga import ReadMangaParser
+                self.register_parser("readmanga", ReadMangaParser())
+            except Exception as e:
+                self.logger.error(f"Ошибка регистрации парсера readmanga: {e}")
 
     async def close_all(self):
-        """Закрывает все сессии парсеров"""
-        for parser in self.parsers.values():
-            if hasattr(parser, 'close'):
-                await parser.close()
+        """Закрыть все парсеры (например, сессии aiohttp)"""
+        for name, parser in self.parsers.items():
+            close = getattr(parser, "close", None)
+            if callable(close):
+                try:
+                    await close()
+                    self.logger.debug(f"Закрыт парсер: {name}")
+                except Exception as e:
+                    self.logger.warning(f"Ошибка при закрытии {name}: {e}")
