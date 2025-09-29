@@ -3,11 +3,13 @@ from typing import Dict, Any
 
 
 class ParserManager:
-    def __init__(self, config=None):
+    def __init__(self, config: Dict[str, Any] = None):
+        """
+        :param config: словарь конфигурации (из AppConfig.model_dump())
+        """
         self.config = config or {}
         self.parsers = {}
-
-
+        self.logger = logging.getLogger("ParserManager")  # ← вот это и пропущено было
 
     def register_parser(self, name: str, parser):
         """Регистрирует парсер по имени"""
@@ -26,7 +28,6 @@ class ParserManager:
             except Exception as e:
                 self.logger.error(f"Ошибка регистрации парсера seimanga: {e}")
 
-        # можно по аналогии подключать и другие реальные/тестовые
         if "mangalib" in enabled:
             try:
                 from parsers.mangalib import MangaLibParser
