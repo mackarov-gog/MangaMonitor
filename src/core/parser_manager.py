@@ -6,7 +6,7 @@ class ParserManager:
     def __init__(self, config=None):
         self.config = config or {}
         self.parsers = {}
-        self.logger = logging.getLogger("ParserManager")
+
 
 
     def register_parser(self, name: str, parser):

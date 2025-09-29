@@ -29,18 +29,20 @@ except ImportError as e:
     print("Убедитесь, что все модули созданы и зависимости установлены")
     sys.exit(1)
 
-self.parser_manager = ParserManager(self.config.data)
+
 
 class MangaMonitor:
     """Основной класс приложения"""
 
     def __init__(self):
         self.config = AppConfig()
+        self.parser_manager = ParserManager(self.config.model_dump())
         self.parser_manager = ParserManager()
         self.web_server = WebServer(self.config)
         self.main_window = None
         self.tray_icon = None
         self.setup_logging()
+
 
     def setup_logging(self):
         """Настройка системы логирования"""
