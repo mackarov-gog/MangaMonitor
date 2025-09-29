@@ -1,185 +1,92 @@
-#!/usr/bin/env python3
-"""
-MangaMonitor - Главный файл приложения
-"""
-
-import sys
-import os
+# src/main.py
 import asyncio
-import logging
-from pathlib import Path
+import os
+import sys
 
+BASE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(BASE)
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
 
+from src.core.parser_manager import get_parser, list_parsers
+from src.core.database import init_db, ensure_manga, ensure_chapter, save_page, mark_chapter_saved
+from urllib.parse import urlparse
 
+async def run():
+    init_db()
+    print("Доступные парсеры:", list_parsers())
+    parser = get_parser("seimanga")
+    if parser is None:
+        print("Parser not found")
+        return
 
-# Добавляем src в путь для импортов
-sys.path.append(str(Path(__file__).parent))
+    q = input("Введите название для поиска: ").strip()
+    if not q:
+        print("Пустой запрос, выход.")
+        return
 
+    # используем контекстный менеджер, чтобы сессия гарантированно закрывалась
+    async with parser:
+        results = await parser.search(q, max_pages=2)
+        if not results:
+            print("Ничего не найдено.")
+            return
 
+        for i, r in enumerate(results, 1):
+            print(f"{i}. {r.get('title')} — {r.get('url')}")
 
-try:
-    from core.config import AppConfig
-    from core.database import init_database
-    from core.parser_manager import ParserManager
-    from web.server import WebServer
-    from app.window import MainWindow
-    from app.tray import SystemTray
-except ImportError as e:
-    print(f"Ошибка импорта: {e}")
-    print("Убедитесь, что все модули созданы и зависимости установлены")
-    sys.exit(1)
+        sel = int(input(f"Выберите мангу (1-{len(results)}): ").strip() or "1") - 1
+        sel = max(0, min(sel, len(results)-1))
+        chosen = results[sel]
 
+        print("Получаем инфо...")
+        info = await parser.get_manga_info(chosen["url"])
+        print("Title:", info.get("title"))
+        print("Desc:", (info.get("description") or "")[:300])
+        chapters = info.get("chapters", [])
+        if not chapters:
+            print("Глав нет.")
+            return
 
+        for i, ch in enumerate(chapters, 1):
+            print(f"{i}. {ch.get('title')} — {ch.get('url')}")
 
-class MangaMonitor:
-    """Основной класс приложения"""
+        selc = int(input(f"Выберите главу (1-{len(chapters)}): ").strip() or "1") - 1
+        selc = max(0, min(selc, len(chapters)-1))
+        chapter = chapters[selc]
 
-    def __init__(self):
-        self.config = AppConfig()
-        self.parser_manager = ParserManager(self.config.model_dump())
-        self.parser_manager = ParserManager()
-        self.web_server = WebServer(self.config)
-        self.main_window = None
-        self.tray_icon = None
-        self.setup_logging()
+        # Сохраним в БД
+        manga_id = ensure_manga(info.get("title"), chosen["url"])
+        chapter_id = ensure_chapter(manga_id, chapter.get("title"), chapter.get("url"))
 
+        print("Парсим страницы главы (ссылки на картинки)...")
+        images = await parser.get_chapter_images(chapter.get("url"))
+        if not images:
+            print("Не найдено изображений.")
+            return
 
-    def setup_logging(self):
-        """Настройка системы логирования"""
-        log_dir = Path("logs")
-        log_dir.mkdir(exist_ok=True)
+        print(f"Найдено {len(images)} изображений. Первые 5:")
+        for idx, im in enumerate(images[:5], 1):
+            print(f"{idx}. {im}")
+            save_page(chapter_id, idx, im, None)
 
-        logging.basicConfig(
-            level=logging.DEBUG if self.config.debug else logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.FileHandler(log_dir / "mangamonitor.log", encoding='utf-8'),
-                logging.StreamHandler(sys.stdout)
-            ]
-        )
-        self.logger = logging.getLogger("MangaMonitor")
+        dl = input("Скачать главу локально? (y/N): ").strip().lower()
+        if dl == "y":
+            def slug_from_url(u):
+                p = urlparse(u).path.strip("/").replace("/", "_")
+                return p or "chapter"
 
-    async def initialize(self):
-        """Инициализация приложения"""
-        self.logger.info("Инициализация MangaMonitor...")
+            manga_slug = slug_from_url(chosen["url"])
+            chap_slug = slug_from_url(chapter.get("url"))
+            out_dir = os.path.join(ROOT, "data", "downloads", manga_slug, chap_slug)
 
-        # Инициализация базы данных
-        await init_database()
+            saved = await parser.download_chapter(chapter.get("url"), out_dir=out_dir)
+            for i, path in enumerate(saved, 1):
+                save_page(chapter_id, i, images[i-1] if i-1 < len(images) else "", path)
+            mark_chapter_saved(chapter_id)
+            print(f"Скачано {len(saved)} файлов в {out_dir}")
 
-        # Регистрация всех парсеров
-        self.parser_manager.register_all_parsers()
-        self.logger.info(f"Зарегистрировано парсеров: {len(self.parser_manager.parsers)}")
-
-        # Запуск веб-сервера в фоновой задаче
-        self.server_task = asyncio.create_task(self.web_server.start())
-        self.logger.info(f"Веб-сервер запущен на http://{self.config.host}:{self.config.port}")
-
-        self.logger.info("MangaMonitor инициализирован")
-
-    def create_ui(self):
-        """Создание пользовательского интерфейса"""
-        try:
-            from PyQt5.QtWidgets import QApplication
-            from qasync import QEventLoop
-
-            self.app = QApplication(sys.argv)
-            self.app.setApplicationName("MangaMonitor")
-            self.app.setApplicationVersion("1.0.0")
-            self.app.setQuitOnLastWindowClosed(False)
-
-            # Главное окно
-            self.main_window = MainWindow(self.config, self.parser_manager, self.web_server)
-
-            # Системный трей
-            self.tray_icon = SystemTray(self.main_window, self.app)
-            self.tray_icon.show()
-
-            return self.app
-        except Exception as e:
-            self.logger.error(f"Ошибка создания UI: {e}")
-            raise
-
-    async def run(self):
-        """Запуск приложения"""
-        try:
-            await self.initialize()
-
-            # Qt требует запуска в основном потоке
-            from PyQt5.QtCore import QTimer
-            from qasync import QEventLoop
-
-            app = self.create_ui()
-            loop = QEventLoop(app)
-            asyncio.set_event_loop(loop)
-
-            # Таймер для асинхронных задач
-            timer = QTimer()
-            timer.timeout.connect(lambda: None)
-            timer.start(100)
-
-            self.logger.info("Запуск пользовательского интерфейса...")
-
-            with loop:
-                # Показываем главное окно если не настроен запуск в трее
-                if not self.config.start_minimized:
-                    self.main_window.show()
-                else:
-                    if hasattr(self.tray_icon, 'show_notification'):
-                        self.tray_icon.show_notification(
-                            "MangaMonitor запущен",
-                            "Приложение работает в фоновом режиме"
-                        )
-
-                # Запускаем event loop
-                loop.run_forever()
-
-        except Exception as e:
-            self.logger.error(f"Ошибка при запуске: {e}")
-            raise
-
-    async def shutdown(self):
-        """Корректное завершение работы"""
-        self.logger.info("Завершение работы MangaMonitor...")
-
-        # Остановка парсеров
-        await self.parser_manager.close_all()
-
-        # Остановка веб-сервера
-        if hasattr(self, 'server_task'):
-            self.server_task.cancel()
-            try:
-                await self.server_task
-            except asyncio.CancelledError:
-                pass
-
-        # Скрытие трея
-        if self.tray_icon:
-            self.tray_icon.hide()
-
-        self.logger.info("MangaMonitor завершен")
-
-
-async def main():
-    """Точка входа приложения"""
-    monitor = None
-    try:
-        monitor = MangaMonitor()
-        await monitor.run()
-
-    except KeyboardInterrupt:
-        print("\nПриложение завершено пользователем")
-    except Exception as e:
-        print(f"Ошибка при запуске: {e}")
-        if monitor:
-            await monitor.shutdown()
-        sys.exit(1)
-
+    print("Готово.")
 
 if __name__ == "__main__":
-    # Обработка Ctrl+C
-    import signal
-
-    signal.signal(signal.SIGINT, lambda s, f: asyncio.create_task(main()))
-
-    # Запуск приложения
-    asyncio.run(main())
+    asyncio.run(run())

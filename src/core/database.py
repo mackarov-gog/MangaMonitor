@@ -1,99 +1,97 @@
+# src/core/database.py
 """
-Модуль для работы с базой данных
+Минимальная синхронная обёртка SQLite для хранения манги/глав/страниц.
+DB и папки data/ создаются в корне проекта (MangaMonitor/data).
 """
-
-import asyncio
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, JSON
-from sqlalchemy.ext.declarative import declarative_base
-from datetime import datetime
+import sqlite3
 from pathlib import Path
+from typing import List, Tuple, Optional
 
-Base = declarative_base()
+# Project root: ../.. from src/core (file is src/core/database.py)
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DATA_DIR = PROJECT_ROOT / "data"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+DB_PATH = DATA_DIR / "db.sqlite"
 
-class Manga(Base):
-    """Модель манги"""
-    __tablename__ = "manga"
+_schema = """
+CREATE TABLE IF NOT EXISTS manga (
+    id INTEGER PRIMARY KEY,
+    title TEXT,
+    url TEXT UNIQUE
+);
+CREATE TABLE IF NOT EXISTS chapter (
+    id INTEGER PRIMARY KEY,
+    manga_id INTEGER,
+    title TEXT,
+    url TEXT UNIQUE,
+    saved INTEGER DEFAULT 0,
+    FOREIGN KEY(manga_id) REFERENCES manga(id)
+);
+CREATE TABLE IF NOT EXISTS page (
+    id INTEGER PRIMARY KEY,
+    chapter_id INTEGER,
+    page_index INTEGER,
+    url TEXT,
+    local_path TEXT,
+    FOREIGN KEY(chapter_id) REFERENCES chapter(id)
+);
+"""
 
-    id = Column(Integer, primary_key=True)
-    source = Column(String(50), nullable=False)  # Источник (mangalib, remanga, etc)
-    source_id = Column(String(100), nullable=False)  # ID в источнике
-    title = Column(String(500), nullable=False)
-    description = Column(Text)
-    cover_url = Column(String(500))
-    status = Column(String(50))
-    genres = Column(JSON)  # Список жанров
-    chapters_count = Column(Integer, default=0)
-    last_updated = Column(DateTime, default=datetime.utcnow)
-    created_at = Column(DateTime, default=datetime.utcnow)
+def _get_conn():
+    conn = sqlite3.connect(str(DB_PATH))
+    return conn
 
+def init_db():
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.executescript(_schema)
+    conn.commit()
+    conn.close()
 
-class Chapter(Base):
-    """Модель главы"""
-    __tablename__ = "chapters"
+def ensure_manga(title: str, url: str) -> int:
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute("INSERT OR IGNORE INTO manga(title, url) VALUES (?, ?)", (title, url))
+    conn.commit()
+    cur.execute("SELECT id FROM manga WHERE url = ?", (url,))
+    row = cur.fetchone()
+    mid = row[0] if row else None
+    conn.close()
+    return mid
 
-    id = Column(Integer, primary_key=True)
-    manga_id = Column(Integer, nullable=False)
-    source_chapter_id = Column(String(100), nullable=False)
-    title = Column(String(500))
-    chapter_number = Column(String(50))
-    volume_number = Column(String(50))
-    pages_count = Column(Integer, default=0)
-    publish_date = Column(DateTime)
-    created_at = Column(DateTime, default=datetime.utcnow)
+def ensure_chapter(manga_id: int, title: str, url: str) -> int:
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute("INSERT OR IGNORE INTO chapter(manga_id, title, url) VALUES (?, ?, ?)", (manga_id, title, url))
+    conn.commit()
+    cur.execute("SELECT id FROM chapter WHERE url = ?", (url,))
+    row = cur.fetchone()
+    cid = row[0] if row else None
+    conn.close()
+    return cid
 
-
-class ReadingProgress(Base):
-    """Прогресс чтения"""
-    __tablename__ = "reading_progress"
-
-    id = Column(Integer, primary_key=True)
-    manga_id = Column(Integer, nullable=False)
-    chapter_id = Column(Integer, nullable=False)
-    current_page = Column(Integer, default=0)
-    is_completed = Column(Boolean, default=False)
-    last_read = Column(DateTime, default=datetime.utcnow)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-
-class Bookmark(Base):
-    """Закладки"""
-    __tablename__ = "bookmarks"
-
-    id = Column(Integer, primary_key=True)
-    manga_id = Column(Integer, nullable=False)
-    notes = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-
-# Глобальные переменные для подключения к БД
-engine = None
-async_session = None
-
-
-async def init_database():
-    """Инициализация базы данных"""
-    global engine, async_session
-
-    # Создаем папку data если не существует
-    data_dir = Path("data")
-    data_dir.mkdir(exist_ok=True)
-
-    database_url = f"sqlite+aiosqlite:///{data_dir}/mangamonitor.db"
-    engine = create_async_engine(database_url, echo=False)
-
-    async_session = sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False
+def save_page(chapter_id: int, page_index: int, url: str, local_path: Optional[str] = None):
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO page(chapter_id, page_index, url, local_path) VALUES (?, ?, ?, ?)",
+        (chapter_id, page_index, url, local_path)
     )
+    conn.commit()
+    conn.close()
 
-    # Создаем таблицы
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+def mark_chapter_saved(chapter_id: int):
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute("UPDATE chapter SET saved = 1 WHERE id = ?", (chapter_id,))
+    conn.commit()
+    conn.close()
 
-
-async def get_session() -> AsyncSession:
-    """Получение сессии базы данных"""
-    async with async_session() as session:
-        yield session
+def get_manga_list() -> List[Tuple]:
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT id, title, url FROM manga")
+    rows = cur.fetchall()
+    conn.close()
+    return rows
