@@ -3,6 +3,7 @@ import asyncio
 from bs4 import BeautifulSoup
 
 BASE_URL = "https://1.seimanga.me"
+BASE_URL = "https://a.zazaza.me"
 
 async def fetch(url: str) -> str:
     headers = {"User-Agent": "Mozilla/5.0"}
@@ -67,7 +68,7 @@ async def get_manga_info(slug: str):
     }
 
 if __name__ == "__main__":
-    slug = "svadba_vtroem"
+    slug = "naruto__A35c96"
     info = asyncio.run(get_manga_info(slug))
     print("Манга:", info["title"])
     print("Жанры:", ", ".join(info["genres"]))

@@ -3,14 +3,20 @@ import aiohttp
 import asyncio
 import os
 
-CHAPTER_URL = "https://1.seimanga.me/svadba_vtroem/vol1/2?mtr=true"
+CHAPTER_URL = "https://1.mintmanga.com/21230/vol1/30?mtr=true"
+
 
 async def fetch(url: str) -> str:
-    headers = {"User-Agent": "Mozilla/5.0"}
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+        "Referer": "https://readmanga.me/",
+        "Accept-Language": "ru-RU,ru;q=0.9,en;q=0.8",
+    }
     async with aiohttp.ClientSession() as session:
         async with session.get(url, headers=headers) as resp:
             print(f"[DEBUG] GET {url} -> {resp.status}")
             return await resp.text()
+
 
 async def get_chapter_images(chapter_url: str):
     html = await fetch(chapter_url)
