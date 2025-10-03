@@ -2,11 +2,13 @@
 from __future__ import annotations
 import os
 import re
-from typing import List, Dict, Optional
+import asyncio
+from typing import List, Dict, Optional, Tuple
 from urllib.parse import urljoin, urlparse, urlunparse, parse_qsl, urlencode
 
 import aiohttp
 from bs4 import BeautifulSoup
+from rapidfuzz import fuzz
 
 BASE_URL = "https://1.seimanga.me"
 DEFAULT_HEADERS = {
@@ -58,49 +60,13 @@ class SeiMangaParser:
         new_parsed = parsed._replace(query=new_query)
         return urlunparse(new_parsed)
 
-    # fetch text
-    async def fetch_text(self, url: str) -> str:
+    # fetch text with params support
+    async def fetch_text(self, url: str, params: Optional[dict] = None) -> str:
         sess = await self._get_session()
-        async with sess.get(url) as resp:
+        async with sess.get(url, params=params) as resp:
             text = await resp.text()
-            # краткий лог
-            print(f"[seimanga] GET {url} -> {resp.status}")
+            print(f"[seimanga] GET {resp.url} -> {resp.status}")
             return text
-
-    # search
-    async def search(self, query: str = "", max_pages: int = 3) -> List[Dict]:
-        results: List[Dict] = []
-        offset = 0
-        while True:
-            if query:
-                url = f"{self.base_url}/list?search={query}&offset={offset}"
-            else:
-                url = f"{self.base_url}/list?offset=0"
-
-            html = await self.fetch_text(url)
-            soup = BeautifulSoup(html, "html.parser")
-            tiles = soup.select(".tiles .tile") or soup.select(".tile")
-            if not tiles:
-                break
-
-            for tile in tiles:
-                parsed = self._parse_manga_tile(tile)
-                if not parsed:
-                    continue
-                if query:
-                    if query.lower() in (parsed.get("title") or "").lower():
-                        results.append(parsed)
-                else:
-                    results.append(parsed)
-
-            if not query:
-                break
-
-            offset += len(tiles)
-            if offset <= 0 or (offset // max(1, len(tiles))) + 1 >= max_pages:
-                break
-
-        return results
 
     def _parse_manga_tile(self, tile) -> Optional[Dict]:
         title_el = tile.select_one(".desc h3 a") or tile.select_one("a.tile-title") or tile.select_one("h3 a")
@@ -112,6 +78,61 @@ class SeiMangaParser:
         description_el = tile.select_one(".manga-description")
         description = description_el.get_text(strip=True) if description_el else None
         return {"title": title, "url": url, "genres": genres, "description": description}
+
+    # NEW: parse manga tile for search results (with rating and similarity)
+    def _parse_search_tile(self, tile, query: str = "") -> Dict:
+        title_el = tile.select_one(".desc h3 a")
+        url = urljoin(self.base_url, title_el["href"]) if title_el else None
+        title = title_el.get_text(strip=True) if title_el else None
+
+        rating_el = tile.select_one(".compact-rate")
+        rating = float(rating_el["title"]) if rating_el and rating_el.has_attr("title") else None
+
+        genres = [g.get_text(strip=True) for g in tile.select(".tile-info a[href*='/list/genre/']")]
+        year_el = tile.select_one(".tile-info a[href*='/list/year/']")
+        year = year_el.get_text(strip=True) if year_el else None
+
+        score = fuzz.partial_ratio(query.lower(), title.lower()) if title and query else 0
+
+        return {
+            "title": title,
+            "url": url,
+            "rating": rating,
+            "genres": genres,
+            "year": year,
+            "similarity": score
+        }
+
+    # NEW: search manga function from 3.py
+    async def search_manga(self, query: str, years: Tuple[int, int] = (1961, 2025),
+                           sort: str = "POPULARITY", max_pages: int = 2) -> List[Dict]:
+        """Search manga with similarity scoring and sorting"""
+        results = []
+        offset = 0
+        search_url = f"{self.base_url}/search/advancedResults"
+
+        for _ in range(max_pages):
+            params = {
+                "q": query,
+                "offset": offset,
+                "years": f"{years[0]},{years[1]}",
+                "sortType": sort
+            }
+            html = await self.fetch_text(search_url, params=params)
+            soup = BeautifulSoup(html, "html.parser")
+
+            tiles = soup.select(".tiles .tile")
+            if not tiles:
+                break
+
+            parsed = [self._parse_search_tile(tile, query) for tile in tiles]
+            results.extend(parsed)
+
+            offset += len(tiles)
+
+        # сортировка по совпадению и рейтингу
+        results.sort(key=lambda x: (x["similarity"], x["rating"] or 0), reverse=True)
+        return results
 
     # get manga info
     async def get_manga_info(self, slug_or_url: str) -> Dict:
@@ -141,7 +162,8 @@ class SeiMangaParser:
         year_tag = soup.select_one(".elem_year a")
         year = year_tag.get_text(strip=True) if year_tag else None
 
-        genres = [g.get_text(strip=True) for g in soup.select(".elem_genre a")] or [g.get_text(strip=True) for g in soup.select(".elem_genre")]
+        genres = [g.get_text(strip=True) for g in soup.select(".elem_genre a")] or [g.get_text(strip=True) for g in
+                                                                                    soup.select(".elem_genre")]
         category_tag = soup.select_one(".elem_category a")
         category = category_tag.get_text(strip=True) if category_tag else None
 
@@ -154,7 +176,8 @@ class SeiMangaParser:
             ch_title = ch_link.get_text(strip=True)
             ch_url = urljoin(self.base_url, ch_link.get("href"))
             ch_url = self.ensure_mtr(ch_url)
-            chapters.append({"title": ch_title, "url": ch_url, "date": ch_date.get_text(strip=True) if ch_date else None})
+            chapters.append(
+                {"title": ch_title, "url": ch_url, "date": ch_date.get_text(strip=True) if ch_date else None})
 
         # переворачиваем порядок глав (по требованию)
         chapters.reverse()
@@ -215,12 +238,19 @@ class SeiMangaParser:
 if __name__ == "__main__":
     import asyncio
 
+
     async def _demo():
         async with SeiMangaParser() as parser:
-            res = await parser.search("свадьба", max_pages=1)
-            print("search:", len(res))
-            if res:
-                print(res[0])
+            # Тестирование поиска
+            query = "гуль"
+            results = await parser.search_manga(query, max_pages=2)
+            print(f"Найдено: {len(results)}")
+            for r in results[:10]:
+                print(f"{r['title']} ({r['year']}) ⭐ {r['rating']} [{r['similarity']}%] -> {r['url']}")
+
+            print("\n" + "=" * 50 + "\n")
+
+            # Тестирование информации о манге
             info = await parser.get_manga_info("svadba_vtroem")
             print("title:", info.get("title"))
             if info.get("chapters"):
@@ -228,5 +258,6 @@ if __name__ == "__main__":
                 imgs = await parser.get_chapter_images(ch["url"])
                 print("images found:", len(imgs))
                 await parser.download_chapter(ch["url"], out_dir="data/downloads/test_ch")
+
 
     asyncio.run(_demo())
