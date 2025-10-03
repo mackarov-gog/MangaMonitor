@@ -27,13 +27,15 @@ async def run():
 
     # используем контекстный менеджер, чтобы сессия гарантированно закрывалась
     async with parser:
-        results = await parser.search(q, max_pages=2000)
+        results = await parser.search_manga(q, max_pages=2)
+
+
         if not results:
             print("Ничего не найдено.")
             return
 
         for i, r in enumerate(results, 1):
-            print(f"{i}. {r.get('title')} — {r.get('url')}")
+            print(f"{r['title']} ({r['year']}) ⭐ {r['rating']} [{r['similarity']}%] -> {r['url']}")
 
         sel = int(input(f"Выберите мангу (1-{len(results)}): ").strip() or "1") - 1
         sel = max(0, min(sel, len(results)-1))
