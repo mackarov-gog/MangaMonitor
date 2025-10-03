@@ -98,7 +98,7 @@ async def chapter_view(url: str):
                 font-family:sans-serif;
             }}
             h1 {{
-                color:#6cf;
+                color:#fff;
                 text-align:center;
                 margin:10px 0;
             }}
@@ -214,7 +214,7 @@ async def search_view(q: str = ""):
         <title>Поиск MangaMonitor</title>
         <style>
             body {{ background:#111; color:#eee; font-family:sans-serif; margin:0; padding:20px; }}
-            h1 {{ color:#6cf; text-align:center; }}
+            h1 {{ color:#fff; text-align:center; }}
             form {{ text-align:center; margin-bottom:30px; }}
             input[type="text"] {{
                 padding:10px; width:300px; border-radius:8px; border:1px solid #444;
@@ -232,7 +232,7 @@ async def search_view(q: str = ""):
                 box-shadow:0 2px 6px rgba(0,0,0,0.4); transition:0.2s;
             }}
             .card:hover {{ background:#222; transform:translateY(-3px); }}
-            .card a {{ color:#6cf; font-size:18px; text-decoration:none; }}
+            .card a {{ color:#fff; font-size:18px; text-decoration:none; }}
             .card a:hover {{ text-decoration:underline; }}
         </style>
     </head>
@@ -263,16 +263,16 @@ async def manga_view(url: str):
         <style>
             body {{ background:#111; color:#eee; font-family:sans-serif; margin:0; padding:20px; }}
             .container {{ max-width:900px; margin:0 auto; }}
-            h1 {{ color:#6cf; }}
+            h1 {{ color:#fff; }}
             p {{ line-height:1.6; margin:20px 0; }}
-            h2 {{ margin-top:30px; color:#6cf; }}
+            h2 {{ margin-top:30px; color:#fff; }}
             .chapters {{ display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:12px; }}
             .chapter {{
                 background:#1a1a1a; padding:12px; border-radius:8px;
                 box-shadow:0 2px 6px rgba(0,0,0,0.4); transition:0.2s;
             }}
             .chapter:hover {{ background:#222; transform:translateY(-3px); }}
-            .chapter a {{ color:#6cf; text-decoration:none; font-size:16px; }}
+            .chapter a {{ color:#fff; text-decoration:none; font-size:16px; }}
             .chapter a:hover {{ text-decoration:underline; }}
         </style>
     </head>
