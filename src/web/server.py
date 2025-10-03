@@ -32,7 +32,7 @@ async def search(q: str = Query(..., description="Название манги"))
         return JSONResponse(status_code=500, content={"error": "Парсер не найден"})
 
     async with parser:
-        results = await parser.search(q, max_pages=5000)
+        results = await parser.search_manga(q, max_pages=2)
     return {"results": results}
 
 
@@ -205,7 +205,7 @@ async def search_view(q: str = ""):
     results = []
     if q:
         async with parser:
-            results = await parser.search(q, max_pages=500)
+            results = await parser.search_manga(q, max_pages=2)
 
     html = f"""
     <html>
