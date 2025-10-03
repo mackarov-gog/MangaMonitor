@@ -1,3 +1,4 @@
+
 import sys
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QPushButton,
@@ -62,3 +63,4 @@ if __name__ == "__main__":
     window = MangaMonitorUI()
     window.show()
     sys.exit(app.exec())
+
