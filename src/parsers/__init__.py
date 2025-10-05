@@ -5,6 +5,8 @@ from .selfmanga import SelfMangaParser
 from .readmanga import ReadMangaParser
 from .mintmanga import MintMangaParser
 from .zazaza import ZazazaParser
+from .desucity import DesuCityParser
+
 
 __all__ = [
     'BaseMangaParser',
@@ -12,5 +14,6 @@ __all__ = [
     'SelfMangaParser',
     'ReadMangaParser',
     'MintMangaParser',
-    'ZazazaParser'
+    'ZazazaParser',
+    'DesuCityParser'
 ]

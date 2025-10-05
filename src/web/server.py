@@ -20,9 +20,16 @@ app = FastAPI(title="MangaMonitor API")
 # Инициализация базы данных
 init_db()
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
+
+# Создать папку, если вдруг её нет
+os.makedirs(STATIC_DIR, exist_ok=True)
+os.makedirs(TEMPLATES_DIR, exist_ok=True)
+
 # Mount static files and templates
-app.mount("/static", StaticFiles(directory="src/web/static"), name="static")
-templates = Jinja2Templates(directory="src/web/templates")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 @app.get("/")
