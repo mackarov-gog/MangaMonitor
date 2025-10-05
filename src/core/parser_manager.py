@@ -8,6 +8,7 @@ from src.parsers.selfmanga import SelfMangaParser
 from src.parsers.readmanga import ReadMangaParser
 from src.parsers.mintmanga import MintMangaParser
 from src.parsers.zazaza import ZazazaParser
+from src.parsers.desucity import DesuCityParser
 
 _PARSERS: Dict[str, type] = {
     "seimanga": SeiMangaParser,
@@ -15,6 +16,7 @@ _PARSERS: Dict[str, type] = {
     "readmanga": ReadMangaParser,
     "mintmanga": MintMangaParser,
     "zazaza": ZazazaParser,
+    "desucity": DesuCityParser,
 }
 
 # Карта доменов для автоматического определения парсера

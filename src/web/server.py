@@ -6,6 +6,8 @@ from fastapi import FastAPI, Query, HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.responses import Response
+import aiohttp
 
 from src.core.database import (
     init_db, ensure_manga, ensure_chapter,
@@ -26,6 +28,22 @@ templates = Jinja2Templates(directory="src/web/templates")
 @app.get("/")
 def root():
     return {"message": "MangaMonitor API работает. Перейдите на /docs для документации."}
+
+
+
+@app.get("/api/proxy")
+async def proxy_image(url: str):
+    """Прокси изображений с Desu.city для обхода защиты Referer"""
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+        "Referer": "https://desu.city/",
+        "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+    }
+    async with aiohttp.ClientSession(headers=headers) as session:
+        async with session.get(url) as resp:
+            content = await resp.read()
+            return Response(content=content, media_type=resp.headers.get("Content-Type", "image/jpeg"))
+
 
 
 @app.get("/api/parsers")
@@ -109,6 +127,7 @@ async def chapter_images(url: str, index: int = None):
 
         async with parser:
             images = await parser.get_chapter_images(url)
+            images = [f"/api/proxy?url={img}" for img in images]
 
         if index is not None:
             if 1 <= index <= len(images):
@@ -197,10 +216,11 @@ async def download_chapter(manga_url: str, chapter_url: str):
 async def search_view(
         q: str = "",
         parser: str = "all",
-        max_pages: int = 1
+        max_pages: int = 100
 ):
     """Веб-интерфейс для поиска манги"""
     results = []
+    error_message = None
     if q:
         try:
             if parser == "all":
@@ -320,6 +340,12 @@ async def search_view(
                 margin: 40px 0;
                 grid-column: 1 / -1;
             }}
+            .results-count {{
+                color: #6cf;
+                margin: 20px 0;
+                font-size: 18px;
+                text-align: center;
+            }}
         </style>
     </head>
     <body>
@@ -344,34 +370,37 @@ async def search_view(
                 </select>
             </div>
 
-            <div class="form-group">
-                <label for="max_pages">Страниц:</label>
-                <input type="number" id="max_pages" name="max_pages" value="{max_pages}" min="1" max="5">
-            </div>
+
 
             <button type="submit">Искать</button>
         </form>
     """
 
+    # Добавляем отображение количества найденных манг
+    if q:
+        if error_message:
+            html += f'<div class="error">{error_message}</div>'
+        else:
+            html += f'<div class="results-count">Найдено манг: {len(results)}</div>'
+
     html += '<div class="results">'
 
-    if q and not results:
+    if q and not results and not error_message:
         html += f'<div class="no-results">По запросу "{q}" ничего не найдено</div>'
 
     for item in results:
         parser_badge = f'<span class="parser">{item.get("parser", "unknown")}</span>'
         rating = item.get('rating', 'N/A')
         year = item.get('year', 'N/A')
-        similarity = item.get('similarity', 0)
+
 
         html += f"""
         <a class='card' href='/manga/view?url={quote(item['url'], safe='')}'>
             {parser_badge}
             <h3>{item['title']}</h3>
             <div class='meta'>
-                <div><strong>Год:</strong> {year}</div>
                 <div><strong>Рейтинг:</strong> {rating}</div>
-                <div><strong>Совпадение:</strong> {similarity}%</div>
+                <div><strong>Год:</strong> {year}</div>
             </div>
             <span class="open-link">Открыть →</span>
         </a>
